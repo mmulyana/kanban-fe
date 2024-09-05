@@ -22,18 +22,8 @@ import {
 import Container from './components/Container'
 import Items from './components/Item'
 import { useEffect, useState } from 'react'
-import { v4 as uuidv4 } from 'uuid'
 import axios from 'axios'
-import { useSequentialRequest } from './hooks/use-sequential-request'
-
-type DNDType = {
-  id: UniqueIdentifier
-  title: string
-  items: {
-    id: UniqueIdentifier
-    title: string
-  }[]
-}
+import useItemsOrder from './hooks/use-items-order'
 
 interface ContainerType {
   id: string
@@ -52,27 +42,11 @@ interface ItemType {
 function App() {
   const [containers, setContainers] = useState<ContainerType[]>([])
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
-  const [currentContainerId, setCurrentContainerId] =
-    useState<UniqueIdentifier>()
   const [containerName, setContainerName] = useState('')
   const [itemName, setItemName] = useState('')
   const [showAddContainerModal, setShowAddContainerModal] = useState(false)
   const [showAddItemModal, setShowAddItemModal] = useState(false)
-
-  const run = useSequentialRequest((signal: AbortSignal) =>
-    fetch('https://example.com/api/endpoint', {
-      signal,
-      method: 'POST', // Specifies the HTTP method
-      headers: {
-        'Content-Type': 'application/json', // Set the content type to JSON (or others like 'application/x-www-form-urlencoded' if needed)
-        Authorization: 'Bearer your-token-here', // Optional: for protected APIs
-      },
-      body: JSON.stringify({
-        key1: 'value1',
-        key2: 'value2',
-      }), // Body is the data to be sent, in stringified format
-    }).then((res) => res.text())
-  )
+  const { updateItemsOrder } = useItemsOrder()
 
   const onAddContainer = () => {
     // if (!containerName) return
@@ -125,39 +99,12 @@ function App() {
 
   const fetchContainersAndItems = async () => {
     const { data } = await axios('http://localhost:3000/api/containers')
-    console.log(data)
     setContainers(data)
-  }
-
-  const updateItemsOrder = async (containerId: string, items: ItemType[]) => {
-    try {
-      await axios.patch(
-        `http://localhost:3000/api/containers/${containerId}/items-order`,
-        {
-          items: items.map((item, index) => ({ id: item.id, position: index })),
-        }
-      )
-    } catch (error) {
-      console.error('Error updating items order:', error)
-      // You might want to handle this error, perhaps by showing a notification to the user
-    }
   }
 
   useEffect(() => {
     fetchContainersAndItems()
   }, [])
-
-  // const findContainerTitle = (id: UniqueIdentifier | undefined) => {
-  //   const container = findValueOfItems(id, 'container')
-  //   if (!container) return ''
-  //   return container.title
-  // }
-
-  // const findContainerItems = (id: string) => {
-  //   const container = findValueOfItems(id, 'container')
-  //   if (!container) return []
-  //   return container.items
-  // }
 
   // DND Handlers
   const sensors = useSensors(
@@ -273,119 +220,11 @@ function App() {
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event
+    const { over } = event
 
     if (!over) return
 
-    // Handling Container Sorting
-    if (
-      active.id.toString().includes('container') &&
-      over.id.toString().includes('container') &&
-      active.id !== over.id
-    ) {
-      const activeContainerIndex = containers.findIndex(
-        (container) => container.id === active.id
-      )
-      const overContainerIndex = containers.findIndex(
-        (container) => container.id === over.id
-      )
-      let newItems = arrayMove(
-        containers,
-        activeContainerIndex,
-        overContainerIndex
-      )
-      setContainers(newItems)
-      // You might want to add a function here to update container positions in the backend
-    }
-
-    // Handling item Sorting
-    if (
-      active.id.toString().includes('item') &&
-      over.id.toString().includes('item') &&
-      active.id !== over.id
-    ) {
-      const activeContainer = findValueOfItems(
-        active.id,
-        'item'
-      ) as ContainerType
-      const overContainer = findValueOfItems(over.id, 'item') as ContainerType
-
-      if (!activeContainer || !overContainer) return
-
-      const activeContainerIndex = containers.findIndex(
-        (container) => container.id === activeContainer.id
-      )
-      const overContainerIndex = containers.findIndex(
-        (container) => container.id === overContainer.id
-      )
-      const activeItemIndex = activeContainer.items.findIndex(
-        (item) => item.id === active.id
-      )
-      const overItemIndex = overContainer.items.findIndex(
-        (item) => item.id === over.id
-      )
-
-      let newItems = [...containers]
-
-      if (activeContainerIndex === overContainerIndex) {
-        // In the same container
-        newItems[activeContainerIndex].items = arrayMove(
-          newItems[activeContainerIndex].items,
-          activeItemIndex,
-          overItemIndex
-        )
-        setContainers(newItems)
-        console.log('END same container')
-      } else {
-        // In different containers
-        const [movedItem] = newItems[activeContainerIndex].items.splice(
-          activeItemIndex,
-          1
-        )
-        newItems[overContainerIndex].items.splice(overItemIndex, 0, movedItem)
-        setContainers(newItems)
-        console.log('END diff container')
-      }
-    }
-
-    // Handling item dropping into Container
-    if (
-      active.id.toString().includes('item') &&
-      over.id.toString().includes('container') &&
-      active.id !== over.id
-    ) {
-      const activeContainer = findValueOfItems(
-        active.id,
-        'item'
-      ) as ContainerType
-      const overContainer = findValueOfItems(
-        over.id,
-        'container'
-      ) as ContainerType
-
-      if (!activeContainer || !overContainer) return
-
-      const activeContainerIndex = containers.findIndex(
-        (container) => container.id === activeContainer.id
-      )
-      const overContainerIndex = containers.findIndex(
-        (container) => container.id === overContainer.id
-      )
-      const activeItemIndex = activeContainer.items.findIndex(
-        (item) => item.id === active.id
-      )
-
-      let newItems = [...containers]
-      const [movedItem] = newItems[activeContainerIndex].items.splice(
-        activeItemIndex,
-        1
-      )
-      newItems[overContainerIndex].items.push(movedItem)
-      setContainers(newItems)
-
-      console.log('END diff container')
-    }
-    console.log('container end')
+    updateItemsOrder(containers)
 
     setActiveId(null)
   }
@@ -446,7 +285,6 @@ function App() {
                   key={container.id}
                   onAddItem={() => {
                     setShowAddItemModal(true)
-                    setCurrentContainerId(container.id)
                   }}
                 >
                   <SortableContext items={container.items.map((i) => i.id)}>
