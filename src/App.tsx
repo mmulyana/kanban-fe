@@ -24,6 +24,7 @@ import Items from './components/Item'
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 import useItemsOrder from './hooks/use-items-order'
+import io from 'socket.io-client'
 
 interface ContainerType {
   id: string
@@ -39,6 +40,8 @@ interface ItemType {
   position: number
 }
 
+const socket = io('http://localhost:3001')
+
 function App() {
   const [containers, setContainers] = useState<ContainerType[]>([])
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
@@ -47,6 +50,23 @@ function App() {
   const [showAddContainerModal, setShowAddContainerModal] = useState(false)
   const [showAddItemModal, setShowAddItemModal] = useState(false)
   const { updateItemsOrder } = useItemsOrder()
+
+  useEffect(() => {
+    socket.emit('requestInitialData')
+    socket.on('initialData', (data) => {
+      console.log('init', data)
+      setContainers(data)
+    })
+
+    socket.on('dataUpdated', (updatedData) => {
+      setContainers(updatedData)
+    })
+
+    return () => {
+      socket.off('initialData')
+      socket.off('dataUpdated')
+    }
+  }, [])
 
   const onAddContainer = () => {
     // if (!containerName) return
@@ -103,7 +123,7 @@ function App() {
   }
 
   useEffect(() => {
-    fetchContainersAndItems()
+    // fetchContainersAndItems()
   }, [])
 
   // DND Handlers
@@ -224,7 +244,8 @@ function App() {
 
     if (!over) return
 
-    updateItemsOrder(containers)
+    // updateItemsOrder(containers)
+    socket.emit('updatedItems', containers)
 
     setActiveId(null)
   }
